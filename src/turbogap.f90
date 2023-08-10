@@ -7,9 +7,8 @@
 ! HND X   TurboGAP is published and distributed under the
 ! HND X      Academic Software License v1.0 (ASL)
 ! HND X
-! HND X   This file, turbogap.f90, is copyright (c) 2019-2023, Miguel A. Caro and
-! HND X   Tigany Zarrouk
-! HND X   Uttiyoarnab saha
+! HND X   This file, turbogap.f90, is copyright (c) 2019-2023, Miguel A. Caro,
+! HND X   Tigany Zarrouk, Uttiyoarnab saha, and Max Veit.
 ! HND X
 ! HND X   TurboGAP is distributed in the hope that it will be useful for non-commercial
 ! HND X   academic research, but WITHOUT ANY WARRANTY; without even the implied
@@ -43,6 +42,7 @@ program turbogap
   use gap_interface
   use types
   use vdw
+  use electrostatics
   use exp_utils
   use exp_interface
   use soap_turbo_functions
@@ -70,6 +70,7 @@ program turbogap
   real*8, target :: virial(1:3, 1:3), this_virial(1:3, 1:3), virial_soap(1:3, 1:3), virial_2b(1:3, 1:3), &
        virial_3b(1:3,1:3), virial_core_pot(1:3, 1:3), virial_vdw(1:3, 1:3), virial_lp(1:3,1:3), &
        this_virial_vdw(1:3, 1:3), this_virial_lp(1:3, 1:3), virial_pdf(1:3,1:3), this_virial_pdf(1:3,1:3), v_uc,&
+       & virial_estat(1:3, 1:3), this_virial_estat(1:3, 1:3), &
        & virial_sf(1:3,1:3), this_virial_sf(1:3,1:3), &
        & virial_xrd(1:3,1:3), this_virial_xrd(1:3,1:3), &
        & virial_nd(1:3,1:3), this_virial_nd(1:3,1:3), &
@@ -139,7 +140,7 @@ program turbogap
        & this_n_sites_mpi, n_sites_prev = 0,&
        & n_atom_pairs_by_rank_prev=0, cPnz, n_pairs, n_all_sites,&
        & n_sites_out, n_local_properties_tot=0, n_lp_count=0,&
-       & vdw_lp_index, core_be_lp_index, xps_idx
+       & charge_lp_index, vdw_lp_index, core_be_lp_index, xps_idx
 
   integer :: l_max, n_atom_pairs, n_max, ijunk, central_species = 0,&
        & n_atom_pairs_total
@@ -181,6 +182,7 @@ program turbogap
   !vdw crap
   real*8, allocatable :: v_neigh_vdw(:), energies_vdw(:), forces_vdw(:,:), this_energies_vdw(:), this_forces_vdw(:,:)
   real*8, allocatable :: v_neigh_lp(:), energies_lp(:), forces_lp(:,:), this_energies_lp(:), this_forces_lp(:,:)
+  real*8, allocatable :: chg_neigh_estat(:), energies_estat(:), forces_estat(:,:), this_energies_estat(:), this_forces_estat(:,:)
   real*8, allocatable :: energies_pdf(:) , forces_pdf(:,:), this_energies_pdf(:), this_forces_pdf(:,:)
   real*8, allocatable :: energies_sf(:) , forces_sf(:,:), this_energies_sf(:), this_forces_sf(:,:)
   real*8, allocatable :: energies_xrd(:), forces_xrd(:,:), this_energies_xrd(:), this_forces_xrd(:,:)
@@ -527,6 +529,9 @@ program turbogap
         if( params%vdw_rcut > rcut_max )then
            rcut_max = params%vdw_rcut
         end if
+        if (params%estat_rcut > rcut_max) then
+            rcut_max = params%estat_rcut
+        end if
         if( params%xrd_rcut > rcut_max )then
            rcut_max = params%xrd_rcut
         end if
@@ -536,7 +541,6 @@ program turbogap
         if( params%pair_distribution_rcut > rcut_max )then
            rcut_max = params%pair_distribution_rcut
         end if
-
         !   We increase rcut_max by the neighbors buffer
         rcut_max = rcut_max + params%neighbors_buffer
 
@@ -646,6 +650,22 @@ program turbogap
                        end if
                     end do
 
+                 end if
+
+                 if (trim(local_property_labels(j)) == "atomic_charge") then
+                    charge_lp_index = i
+                    !TODO copied from Hirshfeld_v section above -- but why is this extra check needed??
+                    !     Note that we only ever expect one set of charges per simulation, so
+                    !     soap_turbo_hypers(j)%n_local_properties should almost always be 1.
+                    do k = 1, soap_turbo_hypers(j)%n_local_properties
+                       if (trim(soap_turbo_hypers(j)%local_property_models(k)%label) == "atomic_charge")then
+                          if( params%do_derivatives .or. params%do_forces)then
+                             soap_turbo_hypers(j)%local_property_models(k)%do_derivatives = .true.
+                          else
+                             soap_turbo_hypers(j)%local_property_models(k)%do_derivatives = .false.
+                          end if
+                       end if
+                    end do
                  end if
 
 
@@ -1652,10 +1672,10 @@ program turbogap
 
 !        print *, rank, " Allocating prediction arrays"
         !     We only need to reallocate the arrays if the number of sites changes
-        ! REMOVE TRUE FROM IF STATEMENT
+        ! REMOVE TRUE FROM IF STATEMENT   <--- WTF?
         if( n_sites /= n_sites_prev .or. params%do_mc  )then
            if( allocated(energies) )deallocate( energies, energies_soap, energies_2b, energies_3b, energies_core_pot, &
-                this_energies, energies_vdw, this_forces, energies_lp, energies_exp  )
+                this_energies, energies_vdw, energies_estat, this_forces, energies_lp, energies_exp )
            allocate( energies(1:n_sites) )
            allocate( this_energies(1:n_sites) )
            allocate( energies_soap(1:n_sites) )
@@ -1663,6 +1683,7 @@ program turbogap
            allocate( energies_3b(1:n_sites) )
            allocate( energies_core_pot(1:n_sites) )
            allocate( energies_vdw(1:n_sites) )
+           allocate( energies_estat(1:n_sites) )
            allocate( energies_lp(1:n_sites) )
            allocate( energies_exp(1:n_sites) )
 
@@ -1695,6 +1716,7 @@ program turbogap
         energies_3b = 0.d0
         energies_core_pot = 0.d0
         energies_vdw = 0.d0
+        energies_estat = 0.0_dp
         energies_lp = 0.d0
         energies_exp = 0.d0
 
@@ -1759,13 +1781,14 @@ program turbogap
         if( params%do_forces )then
            if( n_sites /= n_sites_prev .or.  params%do_mc )then
               if( allocated(forces) )deallocate( forces, forces_soap, forces_2b, forces_3b, forces_core_pot, forces_vdw,&
-                   & forces_lp )
+                   & forces_estat, forces_lp )
               allocate( forces(1:3, 1:n_sites) )
               allocate( forces_soap(1:3, 1:n_sites) )
               allocate( forces_2b(1:3, 1:n_sites) )
               allocate( forces_3b(1:3, 1:n_sites) )
               allocate( forces_core_pot(1:3, 1:n_sites) )
               allocate( forces_vdw(1:3,1:n_sites) )
+              allocate( forces_estat(1:3, 1:n_sites) )
               allocate( forces_lp(1:3,1:n_sites) )
 
               if (params%do_pair_distribution .and. params%exp_forces .and. params%valid_pdf)then
@@ -1796,6 +1819,7 @@ program turbogap
            forces_3b = 0.d0
            forces_core_pot = 0.d0
            forces_vdw = 0.d0
+           forces_estat = 0.0_dp
            forces_lp = 0.d0
            virial = 0.d0
            virial_soap = 0.d0
@@ -1803,6 +1827,7 @@ program turbogap
            virial_3b = 0.d0
            virial_core_pot = 0.d0
            virial_vdw = 0.d0
+           virial_estat = 0.0_dp
            virial_lp = 0.d0
 
            if (params%do_pair_distribution .and. params%exp_forces .and. params%valid_pdf)then
@@ -2038,8 +2063,11 @@ program turbogap
               ! We can have a pointer to specific parts of this_local_properties array to then
 
 
+              !WHAT
+              !IS
+              !THIS
+              !
               ! if (soap_turbo_hypers(i)%has_local_properties)then
-
               !    ! only iterating over the computed properties
               !    this_local_properties = 0.d0
               !    if( params%do_forces )then
@@ -2325,6 +2353,43 @@ program turbogap
            deallocate(v_neigh_vdw)
         end if
 
+        !     Compute ELECTROSTATIC energies and forces
+        if ((params%estat_method /= "none") .and. params%do_prediction) then
+           !TODO do timing
+#ifdef _MPIF90
+           allocate( this_energies_estat(1:n_sites) )
+           this_energies_estat = 0.d0
+           if( params%do_forces )then
+              allocate( this_forces_estat(1:3,1:n_sites) )
+              this_forces_estat = 0.d0
+           end if
+#endif
+           allocate(chg_neigh_estat(1:j_end-j_beg+1))
+           chg_neigh_estat = 0.d0
+           k = 0
+           do i = i_beg, i_end
+              do j = 1, n_neigh(i)
+                 !           I'm not sure if this is necessary or neighbors_list is already bounded between 1 and n_sites -> CHECK THIS
+                 j2 = mod(neighbors_list(j_beg + k)-1, n_sites) + 1
+                 k = k + 1
+                 chg_neigh_estat(k) = local_properties(j2, charge_lp_index)
+              end do
+           end do
+           ! Prepare to call electrostatics subroutine!
+           call compute_coulomb_direct(&
+                    local_properties(i_beg:i_end, charge_lp_index), &
+                    local_properties_cart_der(1:3, i_beg:i_end, charge_lp_index), &
+                    n_neigh(i_beg:i_end), neighbors_list(j_beg:j_end), &
+                    params%estat_rcut, params%estat_rcut_inner, params%estat_inner_width, &
+                    rjs(j_beg:j_end), xyz(1:3, j_beg:j_end), chg_neigh_estat, &
+                    params%do_forces,&
+#ifdef _MPIF90
+                    this_energies_estat(i_beg:i_end), this_forces_estat, this_virial_estat)
+#else
+                    energies_estat(i_beg:i_end), forces_estat, virial_estat)
+#endif
+            deallocate(chg_neigh_estat)
+        end if
 
         !----------------------------------------------------!
         !--- EXPERIMENTAL SPECTRUM CALCULATION AND FORCES ---!
@@ -3258,6 +3323,9 @@ program turbogap
            if( allocated(this_energies_vdw) )then
               counter2 = counter2 + 1
            end if
+           if (allocated(this_energies_estat)) then
+              counter2 = counter2 + 1
+           end if
            if( allocated(this_energies_lp) )then
               counter2 = counter2 + 1
            end if
@@ -3312,6 +3380,15 @@ program turbogap
               end if
            end if
 
+           if( allocated(this_energies_estat) )then
+              counter2 = counter2 + 1
+              all_energies(1:n_sites, counter2) = this_energies_estat(1:n_sites)
+              if( params%do_forces )then
+                 all_forces(1:3, 1:n_sites, counter2) = this_forces_estat(1:3, 1:n_sites)
+                 all_virial(1:3, 1:3, counter2) = this_virial_estat(1:3, 1:3)
+              end if
+           end if
+
            if( allocated(this_energies_lp) )then
               counter2 = counter2 + 1
               all_energies(1:n_sites, counter2) = this_energies_lp(1:n_sites)
@@ -3356,7 +3433,6 @@ program turbogap
                  all_virial(1:3, 1:3, counter2) = this_virial_nd(1:3, 1:3)
               end if
            end if
-
 
            if( n_distance_2b > 0 )then
               counter2 = counter2 + 1
@@ -3417,6 +3493,18 @@ program turbogap
                  deallocate(this_forces_vdw)
               end if
            end if
+
+           if (allocated(this_energies_estat)) then
+              counter2 = counter2 + 1
+              energies_estat(1:n_sites) = all_this_energies(1:n_sites, counter2)
+              deallocate(this_energies_estat)
+              if (params%do_forces) then
+                 forces_estat(1:3, 1:n_sites) = all_this_forces(1:3, 1:n_sites, counter2)
+                 virial_estat(1:3, 1:3) = all_this_virial(1:3, 1:3, counter2)
+                 deallocate(this_forces_estat)
+              end if
+           end if
+
            if( allocated(this_energies_lp) )then
               counter2 = counter2 + 1
               energies_lp(1:n_sites) = all_this_energies(1:n_sites, counter2)
