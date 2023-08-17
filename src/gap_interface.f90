@@ -376,12 +376,13 @@ module gap_interface
                & local_property_models(i4)%alphas_d,&
                & local_property_models(i4)%V0,&
                & local_property_models(i4)%delta,&
-               & local_property_models(i4)%zeta, local_properties, local_properties_d,&
+               & local_property_models(i4)%zeta,&
+               & local_property_models(i4)%zero_trunc,&
+               & local_properties, local_properties_d,&
                & do_derivatives, soap_cart_der_d,&
                & local_properties_cart_der,&
                & local_properties_cart_der_d, n_pairs, l_index_d ,&
                & cublas_handle, gpu_stream )
-
 
           do i = 1, n_sites
              i2 = in_to_out_site(i)
@@ -853,7 +854,7 @@ subroutine get_local_properties( soap, Qs, alphas, V0, delta, zeta, &
                               local_property0, do_derivatives, soap_cart_der, n_neigh_out, &
                               local_property_cart_der0, n_atom_pairs,&
                               & in_to_out_pairs, n_all_sites,&
-                              & in_to_out_site, n_sites_out )
+                              & in_to_out_site, n_sites_out, do_zero_floor )
 
   real*8, allocatable, intent(in) :: soap(:,:), soap_cart_der(:,:,:)
   real*8, intent(in) ::  Qs(:,:), alphas(:), zeta, delta, V0
@@ -861,7 +862,7 @@ subroutine get_local_properties( soap, Qs, alphas, V0, delta, zeta, &
   real*8, allocatable :: local_property(:), local_property_cart_der(:,:)
   integer, intent(in) :: n_atom_pairs, in_to_out_pairs(:), n_all_sites,&
        & in_to_out_site(:), n_neigh_out(:), n_sites_out
-  logical, intent(in) :: do_derivatives
+  logical, intent(in) :: do_derivatives, do_zero_floor
 
   allocate( local_property( 1:n_sites_out ) )
   local_property = 0.d0
@@ -872,7 +873,7 @@ subroutine get_local_properties( soap, Qs, alphas, V0, delta, zeta, &
 
   call local_property_predict( soap, Qs, alphas, V0, delta, zeta, &
        local_property, do_derivatives, soap_cart_der, n_neigh_out, &
-       local_property_cart_der )
+       local_property_cart_der, do_zero_floor)
   do i = 1, n_sites_out
      i2 = in_to_out_site(i)
      local_property0(i2) = local_property(i)

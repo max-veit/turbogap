@@ -61,7 +61,7 @@ module types
      real*8              :: zeta, delta, V0
      character*1024      :: file_alphas, file_desc, label
      integer             :: n_sparse, dim
-     logical             :: do_derivatives = .false., compute=.true.
+     logical             :: do_derivatives = .false., compute=.true., zero_trunc = .false.
      type(c_ptr)         :: Qs_d, alphas_d
      integer(c_int)      :: n_sparse_d
      integer(c_size_t)   :: st_size_alphas, st_size_Qs

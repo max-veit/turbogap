@@ -34,7 +34,7 @@ module local_prop
   contains
 
     subroutine gpu_local_property_predict( n_sparse, soap, soap_d, &
-         & Qs_d, alphas_d, e0, delta, zeta0, local_properties, local_properties_d, &
+         & Qs_d, alphas_d, e0, delta, zeta0, zero_trunc, local_properties, local_properties_d, &
          & do_derivatives, soap_der_d, local_properties_cart_der,&
          & local_properties_cart_der_d, n_pairs, l_index_d,&
          & cublas_handle, gpu_stream  )
@@ -45,7 +45,7 @@ module local_prop
     integer(c_int), intent(in) :: n_sparse
     real(c_double), intent(in), target :: soap(:,:), delta, e0, zeta0
     type(c_ptr), intent(in) :: soap_d, soap_der_d
-    logical, intent(in) :: do_derivatives 
+    logical, intent(in) :: do_derivatives, zero_trunc
     type(c_ptr), intent(inout) :: cublas_handle, gpu_stream, alphas_d, Qs_d
     real(c_double), intent(out),target:: local_properties(:), local_properties_cart_der(:,:)
     
@@ -66,6 +66,10 @@ module local_prop
     type(c_ptr), intent(inout) :: l_index_d
     integer :: n1local_properties_cart_der, n2local_properties_cart_der
 
+    if (zero_trunc) then
+        !TODO we'll have to re-implement it for some properties (like Hirshfeld volumes) later
+        write(*,*) "Warning: Zero-truncation of negative local property values has been removed in this version of the code."
+    end if
     
     cdelta_ene=delta*delta
     if( dabs(zeta0-dfloat(int(zeta0))) < 1.d-5 )then
@@ -436,15 +440,16 @@ module local_prop
 
   
 
-  subroutine local_property_predict( soap, Qs, alphas, V0, delta, zeta, V, &
-                                do_derivatives, soap_cart_der, n_neigh, V_der )
+  subroutine local_property_predict(soap, Qs, alphas, V0, delta, zeta, V, &
+                                    do_derivatives, soap_cart_der, n_neigh, V_der, &
+                                    do_zero_floor)
 
     implicit none
 
 !   Input variables
     real*8, intent(in) :: soap(:,:), Qs(:,:), alphas(:), V0, delta, zeta, soap_cart_der(:,:,:)
     integer, intent(in) :: n_neigh(:)
-    logical, intent(in) :: do_derivatives
+    logical, intent(in) :: do_derivatives, do_zero_floor
 !   Output variables
     real*8, intent(out) :: V(:), V_der(:,:)
 !   Internal variables
@@ -509,13 +514,14 @@ module local_prop
     end if
     V = V + V0
 
-!   Make sure all V are >= 0
-!TODO turn this off for other properties, like charges
-    do i = 1, size(V)
-      if( V(i) < 0.d0 )then
-        V(i) = 0.d0
-      end if
-    end do
+    !   Make sure all V are >= 0, if requested
+    if (do_zero_floor) then
+      do i = 1, size(V)
+        if( V(i) < 0.d0 )then
+          V(i) = 0.d0
+        end if
+      end do
+    end if
 
     if( do_derivatives)then
       if( n_sites > 0 )then
