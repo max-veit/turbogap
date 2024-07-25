@@ -2,9 +2,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
-#include <hipblas.h>
-#include <hipsolver.h>
-#include <hiprand.h>
+#include <hipblas/hipblas.h>
+#include <hiprand/hiprand.h>
 #include <assert.h>
 #include <hip/hip_complex.h>
 #include <numbers>
@@ -78,7 +77,8 @@ __device__ double warp_red(double data) {
 
    double res = data;
    for (int i = 32; i!=0; i=i>>1) {
-      res += __shfl_down(res, i, 64);
+      // res += __shfl_down(res, i, 64);
+      res += 0;
    }
    return res;
 }

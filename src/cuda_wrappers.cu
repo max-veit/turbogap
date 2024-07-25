@@ -1,18 +1,16 @@
-#include "hip/hip_runtime.h"
+#include <hip/hip_runtime.h>
 // wrappers file
 // compile with:
 // rm cuda_wrappers.o; nvcc -lcublas -lcurand -arch=sm_80 src/cuda_wrappers.cu -c;
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
-
 #include <cmath>
 
 #include <hip/hip_runtime.h>
-#include <hip/hip_runtime.h>
-#include <hipblas.h>
-#include <hipsolver.h>
-#include <hiprand.h>
+#include <hiprand/hiprand.h>
+#include <cuda_runtime.h>
+#include <hipblas/hipblas.h>
 #include <assert.h>
 #include <hip/hip_complex.h>
 
@@ -287,8 +285,8 @@ extern "C" void create_cublas_handle(hipblasHandle_t *handle,hipStream_t *stream
  	  hipblasCreate(handle);
     hipStreamCreate(stream);
     hipblasSetStream(*handle, *stream);
-    hipsolverCreate(handle);
-    hipsolverSetStream(*handle,*stream);
+    // hipsolverCreate(handle);
+    // hipsolverSetStream(*handle,*stream);
     /*printf("\n cublas handle created \n");
     exit(0);*/
 

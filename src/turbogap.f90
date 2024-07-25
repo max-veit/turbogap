@@ -53,14 +53,14 @@ program turbogap
 !**************************************************************************
 ! Variable definitions
 !
-  real*8, allocatable :: rjs(:), thetas(:), phis(:), xyz(:,:), sph_temp(:), sph_temp3(:,:)
+  real*8, allocatable, target :: rjs(:), thetas(:), phis(:), xyz(:,:), sph_temp(:), sph_temp3(:,:)
   real*8, allocatable :: positions(:,:), positions_prev(:,:), soap(:,:), soap_cart_der(:,:,:), &
                          positions_diff(:,:), forces_prev(:,:)
   real*8 :: rcut_max, a_box(1:3), b_box(1:3), c_box(1:3), max_displacement, energy, energy_prev
-  real*8 :: virial(1:3, 1:3), this_virial(1:3, 1:3), virial_soap(1:3, 1:3), virial_2b(1:3, 1:3), &
+  real*8, target :: virial(1:3, 1:3), this_virial(1:3, 1:3), virial_soap(1:3, 1:3), virial_2b(1:3, 1:3), &
             virial_3b(1:3,1:3), virial_core_pot(1:3, 1:3), virial_vdw(1:3, 1:3), &
             this_virial_vdw(1:3, 1:3), v_uc, eVperA3tobar = 1602176.6208d0
-  real*8, allocatable :: energies(:), forces(:,:), energies_soap(:), forces_soap(:,:), this_energies(:), &
+  real*8, allocatable, target :: energies(:), forces(:,:), energies_soap(:), forces_soap(:,:), this_energies(:), &
                          this_forces(:,:), &
                          energies_2b(:), forces_2b(:,:), energies_3b(:), forces_3b(:,:), &
                          energies_core_pot(:), forces_core_pot(:,:), &
@@ -83,7 +83,7 @@ program turbogap
   character*1 :: creturn = achar(13)
 
 ! Clean up these variables after code refactoring !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  integer, allocatable :: n_neigh(:), neighbors_list(:), alpha_max(:), species(:), species_supercell(:), &
+  integer, allocatable, target :: n_neigh(:), neighbors_list(:), alpha_max(:), species(:), species_supercell(:), &
                           neighbor_species(:), sph_temp_int(:), der_neighbors(:), der_neighbors_list(:), &
                           i_beg_list(:), i_end_list(:), j_beg_list(:), j_end_list(:)
   integer :: n_sites, i, j, k, i2, j2, n_soap, k2, k3, l, n_sites_this, ierr, rank, ntasks, dim, n_sp, &
@@ -113,10 +113,10 @@ program turbogap
 
 ! These are the containers for the hyperparameters of descriptors and GAPs
   integer :: n_soap_turbo = 0, n_distance_2b = 0, n_angle_3b = 0, n_core_pot = 0
-  type(soap_turbo), allocatable :: soap_turbo_hypers(:)
-  type(distance_2b), allocatable :: distance_2b_hypers(:)
-  type(angle_3b), allocatable :: angle_3b_hypers(:)
-  type(core_pot), allocatable :: core_pot_hypers(:)
+  type(soap_turbo), allocatable, target :: soap_turbo_hypers(:)
+  type(distance_2b), allocatable, target :: distance_2b_hypers(:)
+  type(angle_3b), allocatable, target :: angle_3b_hypers(:)
+  type(core_pot), allocatable, target :: core_pot_hypers(:)
 
 !vdw crap
   real*8, allocatable :: v_neigh_vdw(:), energies_vdw(:), forces_vdw(:,:), this_energies_vdw(:), this_forces_vdw(:,:)
@@ -141,7 +141,7 @@ program turbogap
   type(c_ptr) :: n_neigh_d, species_d, neighbor_species_d, rjs_d, alphas_d,cutoff_d,qs_d,xyz_d
   type(c_ptr) :: energies_2b_d,forces_2b_d,virial_2b_d,x_d,V_d,dVdx2_d,forces_core_pot_d,virial_core_pot_d,energies_core_pot_d
   type(c_ptr) :: nf_d, rcut_hard_d, rcut_soft_d, global_scaling_d, atom_sigma_r_d, atom_sigma_r_scaling_d
-  type(c_ptr) :: atom_sigma_t_d, atom_sigma_t_scaling_d, amplitude_scaling_d, alpha_max_d, central_weight_d, Qs_d
+  type(c_ptr) :: atom_sigma_t_d, atom_sigma_t_scaling_d, amplitude_scaling_d, alpha_max_d, central_weight_d
 !**************************************************************************
 !local variables for 3benergy and forces gpu
   character(kind=c_char,len=4) :: c_name_3b

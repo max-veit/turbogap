@@ -5,8 +5,9 @@ SHELL = /bin/sh
 # Include user-modifiable variables from a customizable file.
 # Check the makefiles/ directory for a list of tested architectures
 
-include makefiles/Makefile.CSC-LUMI_cray	
+#include makefiles/Makefile.CSC-LUMI_cray	
 #include makefiles/Makefile.CSC-LUMI_gnu	
+include makefiles/Makefile.Ubuntu_gfortran_cudahop_mpi
 
 
 # Default locations for various files
@@ -22,8 +23,7 @@ F90_OPTS += $(F90_MOD_DIR_OPT) $(INC_DIR)
 
 PROGRAMS := turbogap
 
-SRC_CUDA := cuda_wrappers.cu
-SRC_CC := orthonormalization_kernels.cc 3b_final.cc 
+SRC_CUDA := cuda_wrappers.cu cuda_3b_final.cu
 SRC := splines.f90 types.f90 neighbors.f90 gap.f90 vdw.f90 read_files.f90 md.f90 \
        gap_interface.f90 mpi.f90 xyz.f90 
 SRC_TP_BT := resamplekin.f90 fortran_cuda_interfaces.f90
