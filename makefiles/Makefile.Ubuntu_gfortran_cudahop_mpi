@@ -38,4 +38,4 @@ CUDA_OPTS=  -lcublas -lcurand -arch=sm_80 --ptxas-options=-v
 # BLAS and LAPACK libraries
 CUDA_LIBS= -L$(CUDA_HOME)/lib64
 OPENBLAS_PATH != spack find -p openblas | awk '/openblas/{print $$2}'
-LIBS= -L$(OPENBLAS_PATH)/lib -lopenblas $(CUDA_LIBS)
+LIBS= -L$(OPENBLAS_PATH)/lib -lopenblas $(CUDA_LIBS) -lstdc++
