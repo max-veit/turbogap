@@ -101,7 +101,7 @@ program turbogap
 
   real*8 :: instant_temp, kB = 8.6173303d-5, E_kinetic=0.d0, E_kinetic_prev, time1, time2, time3, time_neigh, &
        time_gap, time_soap(1:3), time_2b(1:3), time_3b(1:3), time_read_input(1:3), time_read_xyz(1:3), &
-       time_mpi(1:3) = 0.d0, time_core_pot(1:3), time_vdw(1:3),&
+       time_mpi(1:3) = 0.d0, time_core_pot(1:3), time_vdw(1:3), time_estat(1:3),&
        & time_pdf(1:3), time_sf(1:3), time_xrd(1:3), time_nd(1:3), time_xps(1:3), time_mc(1:3), &
        & instant_pressure, lv(1:3,1:3), time_mpi_positions(1:3) =&
        & 0.d0, time_mpi_ef(1:3) = 0.d0, time_md(3) = 0.d0,&
@@ -1184,6 +1184,7 @@ program turbogap
   time_3b = 0.d0
   time_core_pot = 0.d0
   time_vdw = 0.d0
+  time_estat = 0.d0
   time_read_xyz = 0.d0
   time_pdf = 0.d0
   time_sf = 0.d0
@@ -2358,7 +2359,7 @@ program turbogap
 
         !     Compute ELECTROSTATIC energies and forces
         if ((params%estat_method /= "none") .and. params%do_prediction) then
-           !TODO do timing
+           time_estat(1) = MPI_wtime()
 #ifdef _MPIF90
            allocate( this_energies_estat(1:n_sites) )
            this_energies_estat = 0.d0
@@ -2392,6 +2393,8 @@ program turbogap
                     energies_estat(i_beg:i_end), forces_estat, virial_estat)
 #endif
             deallocate(chg_neigh_estat)
+            time_estat(2) = MPI_Wtime()
+            time_estat(3) = time_estat(3) + time_estat(2) - time_estat(1)
         end if
 
         !----------------------------------------------------!
@@ -3713,9 +3716,18 @@ program turbogap
                     print *, " i, ", i, " j ", j, " ", virial_core_pot(i,j)
                  end do
               end do
+
+              if (params%estat_method /= "none") then
+                 print *, "> Virial estat "
+                 do i = 1, 3
+                    do j = 1, 3
+                       print *, " i, ", i, " j ", j, " ", virial_estat(i,j)
+                    end do
+                 end do
+              end if
            end if
-           
-           
+
+
            if ( params%print_vdw_forces )then
               open(unit=90, file="forces_vdw", status="unknown")
               do i = 1, n_sites
@@ -4934,6 +4946,7 @@ program turbogap
                  if (params%verb > 50) write(*,'(A,1X,F24.8,1X,A)')' 3b energy:', sum(energies_3b), 'eV |'
                  if (params%verb > 50) write(*,'(A,1X,F18.8,1X,A)')' core_pot energy:', sum(energies_core_pot), 'eV |'
                  if (params%verb > 50) write(*,'(A,1X,F23.8,1X,A)')' vdw energy:', sum(energies_vdw), 'eV |'
+                 if (params%verb > 50) write(*, '(A,1X,F23.8,1X,A)')' estat energy:', sum(energies_estat), 'eV |'
                  if (params%verb > 50 .and. valid_xps) write(*,'(A,1X,F23.8,1X,A)')' xps energy:', sum(energies_lp), 'eV |'
 
                  if ( params%valid_pdf .and. params%do_pair_distribution .and. params%verb > 50)&
@@ -5142,6 +5155,7 @@ program turbogap
         write(*,'(A,F13.3,A)') '     -         3b:', time_3b(3), ' seconds |'
         write(*,'(A,F13.3,A)') '     -   core_pot:', time_core_pot(3), ' seconds |'
         write(*,'(A,F13.3,A)') '     -        vdw:', time_vdw(3), ' seconds |'
+        write(*,'(A,F13.3,A)') '     -      estat:', time_estat(3), ' seconds |'
         if (valid_xps .or. params%do_pair_distribution .or. params&
              &%do_structure_factor .or. params%do_xrd .or. params%do_nd) write(*,'(A&
              &,F13.3,A)')      ' *  Exp. pred.   :', time_pdf(3) + time_sf(3) + time_xrd(3) + time_nd(3), ' seconds&
