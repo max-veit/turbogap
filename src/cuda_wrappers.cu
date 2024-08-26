@@ -2522,6 +2522,69 @@ extern "C" void  gpu_get_core_pot_energy_and_forces(int i_beg, int i_end, bool d
 							  energies_d);
 }
 
+/**
+ *  Pairwise computation of the Coulomb interaction given by a set of charges
+ *  (and their gradients).  Direct summation with a sharp cutoff, so will not
+ *  converge.  May be adapted e.g. to vdW summations if this approach/pattern
+ *  proves efficient.
+ */
+__global__ kernel_compute_coulomb_direct(
+        int i_beg, int i_end, bool do_forces, double r_cut, double coul_scaling, int* n_neigh_d,
+        double* rjs_d, double* rj_xyz_d, double* charges_d, double* charge_gradients_d,
+        double* neighbor_charges_d, double* local_energies_d, double* forces_d, double* virial_d
+) {
+    //TODO I'm suspicious of this -1 here... maybe it was inserted by accident?
+    int i_site = i_beg-1 + threadIdx.x + blockIdx.x*blockDim.x;
+    double forces_loc[3], virial_loc[9], energies_loc;
+    int pair_counter, pair_idx;
+    double center_term, neigh_charge, rij, rij_vec, pair_energy;
+
+    // Really we just need a cumulative some of the n_neigh array somewhere...
+    int pair_idx_start = 0;
+    for (int i = i_beg - 1; i < i_site; i++) {pair_idx_start += n_neigh_d[i];}
+
+    //TODO it would be more efficient to copy the "device" charge and especially neighbour charge
+    //     arrays into local, contiguous arrays.  But we leave this for the next optimization step.
+    if (i_site < i_end) {
+        energies_loc = 0.0;
+        if(do_forces){
+            for (i=0; i <3; i++) forces_loc[i] = 0.0;
+            for (i=0; i <9; i++) virial_loc[i] = 0.0;
+        }
+        center_term = charges[i_site] * coul_scaling;
+        // Pair iteration -- another candidate for parallelization
+        for (pair_counter = 0; pair_counter < n_neigh_d[i_site]; pair_counter++) {
+            pair_idx = pair_counter + pair_idx_start;
+            rij = rjs_d[pair_idx];
+            neigh_charge = neighbor_charges_d[pair_idx];
+            if (rij > rcut) { continue; }
+            pair_energy = center_term * neighbor_charges(pair_counter) / rij;
+            energies_loc += 0.5 * pair_energy;
+        }
+    }
+}
+
+//TODO eventually we want to put this in a separate file, just to keep the
+//     electrostatics (and other long-range) routines separate
+// Also, figure out what to do with the constants??
+extern "C" void gpu_compute_coulomb_direct(
+        int i_beg, int i_end, bool do_forces, double r_cut, int* n_neigh_d,
+        double* rjs_d, double* rj_xyz_d, double* charges_d, double* charge_gradients_d,
+        double* neighbor_charges_d, double* local_energies_d, double* forces_d, double* virial_d,
+        hipStream_t *stream) {
+    dim3 nblocks=dim3((i_end-i_beg+tpb)/tpb,1,1);
+    dim3 nthreads=dim3(tpb,1,1);
+    // Both of these from the NIST website, references 2018 CODATA values
+    const double HARTREE_EV = 27.2113862460;
+    const double BOHR_ANG = 0.5291772109;
+    // Essentially 1/4pi*eps_0 in proper units.
+    // Can be modified with an effective dielectric constant
+    const double COUL_SCALING = HARTREE_EV / BOHR_ANG;
+    kernel_compute_coulomb_direct<<<nblocks, nthreads, 0, stream[0]>>>(
+        i_beg, i_end, do_forces, r_cut, COUL_SCALING, n_neigh_d, rjs_d, rj_xyz_d, charges_d,
+        charge_gradients_d, neighbor_charges_d, local_energies_d, forces_d, virial_d);
+}
+
 extern "C" void gpu_device_sync()
 {
   gpuErrchk( hipDeviceSynchronize() );
